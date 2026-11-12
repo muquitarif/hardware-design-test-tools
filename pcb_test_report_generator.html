@@ -80,7 +80,11 @@
               <span id="frontHint"><span class="text-2xl">＋</span><span class="block font-medium mt-1">Upload front image</span><span class="text-xs text-slate-500">PNG, JPG or WEBP</span></span>
               <input id="frontImage" type="file" accept="image/*" class="hidden" />
             </label>
-            <button type="button" data-clear="front" class="text-xs text-rose-600 mt-2 hidden">Remove image</button>
+            <input id="frontCamera" type="file" accept="image/*" capture="environment" class="hidden" />
+            <div class="flex flex-wrap items-center gap-3 mt-2">
+              <button type="button" data-camera="front" class="rounded-lg border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-semibold px-3 py-2">📷 Take photo</button>
+              <button type="button" data-clear="front" class="text-xs text-rose-600 hidden">Remove image</button>
+            </div>
           </div>
           <div>
             <label class="text-sm font-semibold block mb-2">PCB back side</label>
@@ -89,7 +93,11 @@
               <span id="backHint"><span class="text-2xl">＋</span><span class="block font-medium mt-1">Upload back image</span><span class="text-xs text-slate-500">PNG, JPG or WEBP</span></span>
               <input id="backImage" type="file" accept="image/*" class="hidden" />
             </label>
-            <button type="button" data-clear="back" class="text-xs text-rose-600 mt-2 hidden">Remove image</button>
+            <input id="backCamera" type="file" accept="image/*" capture="environment" class="hidden" />
+            <div class="flex flex-wrap items-center gap-3 mt-2">
+              <button type="button" data-camera="back" class="rounded-lg border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-semibold px-3 py-2">📷 Take photo</button>
+              <button type="button" data-clear="back" class="text-xs text-rose-600 hidden">Remove image</button>
+            </div>
           </div>
         </div>
       </section>
@@ -191,9 +199,11 @@
       </label>
       <div class="mt-3 flex flex-wrap items-center gap-3">
         <label class="inline-flex items-center gap-2 text-xs font-semibold text-teal-700 cursor-pointer">
-          <span class="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2">＋ Add evidence photo (optional)</span>
+          <span class="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2">＋ Choose photo</span>
           <input type="file" class="evidence hidden" accept="image/*">
         </label>
+        <input type="file" class="evidence-camera hidden" accept="image/*" capture="environment">
+        <button type="button" class="take-evidence-photo rounded-lg border border-teal-200 bg-white hover:bg-teal-50 text-teal-800 px-3 py-2">📷 Take photo</button>
         <span class="evidence-name text-xs text-slate-500">No photo selected</span>
         <button type="button" class="remove-evidence text-xs text-rose-600 hidden">Remove photo</button>
       </div>
@@ -201,23 +211,27 @@
     `;
     container.appendChild(row);
     row.querySelector('.remove-row').addEventListener('click', () => { row.remove(); updateCounts(); });
-    row.querySelector('.evidence').addEventListener('change', async (e) => {
+    const processEvidenceFile = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       try {
         const compressed = await compressImage(file);
         row.dataset.evidence = compressed.dataUrl;
         row.dataset.evidenceSize = compressed.size;
-        row.querySelector('.evidence-name').textContent = `${file.name} · ${formatBytes(file.size)} → ${formatBytes(compressed.size)}`;
+        row.querySelector('.evidence-name').textContent = `${file.name || 'Camera photo'} · ${formatBytes(file.size)} → ${formatBytes(compressed.size)}`;
         const img = row.querySelector('.evidence-preview');
         img.src = compressed.dataUrl; img.classList.remove('hidden');
         row.querySelector('.remove-evidence').classList.remove('hidden');
         updateCompressionInfo();
       } catch (error) { alert(error.message || 'Unable to process this image.'); }
-    });
+      e.target.value = '';
+    };
+    row.querySelector('.evidence').addEventListener('change', processEvidenceFile);
+    row.querySelector('.evidence-camera').addEventListener('change', processEvidenceFile);
+    row.querySelector('.take-evidence-photo').addEventListener('click', () => row.querySelector('.evidence-camera').click());
     row.querySelector('.remove-evidence').addEventListener('click', () => {
       delete row.dataset.evidence; delete row.dataset.evidenceSize; updateCompressionInfo();
-      row.querySelector('.evidence').value = '';
+      row.querySelector('.evidence').value = ''; row.querySelector('.evidence-camera').value = '';
       row.querySelector('.evidence-name').textContent = 'No photo selected';
       row.querySelector('.evidence-preview').classList.add('hidden');
       row.querySelector('.remove-evidence').classList.add('hidden');
@@ -284,9 +298,15 @@
   $('imageQuality').addEventListener('input', () => { $('qualityValue').textContent = $('imageQuality').value + '%'; });
 
   ['front','back'].forEach(side => {
-    $(side + 'Image').addEventListener('change', e => handleBoardImage(side, e.target.files[0]));
+    const handleSelection = e => {
+      handleBoardImage(side, e.target.files[0]);
+      e.target.value = '';
+    };
+    $(side + 'Image').addEventListener('change', handleSelection);
+    $(side + 'Camera').addEventListener('change', handleSelection);
+    document.querySelector(`[data-camera="${side}"]`).addEventListener('click', () => $(side + 'Camera').click());
     document.querySelector(`[data-clear="${side}"]`).addEventListener('click', () => {
-      imageData[side] = null; $(side + 'Image').value = ''; updateCompressionInfo();
+      imageData[side] = null; $(side + 'Image').value = ''; $(side + 'Camera').value = ''; updateCompressionInfo();
       $(side + 'Preview').classList.add('hidden'); $(side + 'Hint').classList.remove('hidden');
       document.querySelector(`[data-clear="${side}"]`).classList.add('hidden');
     });
