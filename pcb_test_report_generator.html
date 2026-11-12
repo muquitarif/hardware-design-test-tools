@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PCB Test Report Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .dropzone { border: 1.5px dashed #cbd5e1; transition: .15s ease; }
+    .dropzone:hover { border-color: #0f766e; background: #f0fdfa; }
+    .field { width:100%; border:1px solid #cbd5e1; border-radius:.65rem; padding:.65rem .75rem; outline:none; background:white; }
+    .field:focus { border-color:#0d9488; box-shadow:0 0 0 3px rgb(13 148 136 / .12); }
+    .section-card { border:1px solid #e2e8f0; border-radius:1rem; background:white; }
+    .test-row { border:1px solid #e2e8f0; border-radius:.85rem; padding:1rem; background:#fbfdff; }
+    .preview-paper { background:white; color:#0f172a; box-shadow:0 8px 30px rgb(15 23 42 / .08); }
+    @media print { .no-print { display:none!important; } }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+  <header class="bg-teal-700 text-white">
+    <div class="max-w-7xl mx-auto px-5 py-5 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-bold mt-1">PCB Test Report Generator</h1>
+      </div>
+      <span class="text-xs rounded-full border border-slate-700 px-3 py-1.5 text-slate-300">Power and Functional Testing</span>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 sm:p-6 grid xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
+    <div class="space-y-6">
+      <section class="section-card p-5">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div><h2 class="font-bold text-lg">1. Report information</h2><p class="text-sm text-slate-500">Project and board identification details.</p></div>
+          <span class="text-xs text-slate-400">Required fields marked *</span>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="text-sm font-medium">Project / Client name *
+            <input id="project" class="field mt-1.5" placeholder="e.g. Smart Controller Rev 2" />
+          </label>
+          <label class="text-sm font-medium">PCB name / Model
+            <input id="board" class="field mt-1.5" placeholder="e.g. Main Control Board" />
+          </label>
+          <label class="text-sm font-medium">PCB revision
+            <input id="revision" class="field mt-1.5" placeholder="e.g. Rev 1.2" />
+          </label>
+          <label class="text-sm font-medium">Report number
+            <input id="reportNo" class="field mt-1.5" placeholder="e.g. PCB-TR-001" />
+          </label>
+          <label class="text-sm font-medium">Tested by
+            <input id="testedBy" class="field mt-1.5" placeholder="Name / Engineering team" />
+          </label>
+          <label class="text-sm font-medium">Test date
+            <input id="testDate" type="date" class="field mt-1.5" />
+          </label>
+          <label class="text-sm font-medium sm:col-span-2">Overall notes (optional)
+            <textarea id="overallNotes" rows="2" class="field mt-1.5" placeholder="Test setup, equipment used, environmental conditions..."></textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="section-card p-5">
+        <div class="mb-4"><h2 class="font-bold text-lg">2. PCB Front/ Back Images</h2><p class="text-sm text-slate-500">Add front and back board images. These are embedded in the PDF.</p></div>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-semibold block mb-2">PCB front side</label>
+            <label class="dropzone rounded-xl p-4 min-h-44 flex flex-col items-center justify-center cursor-pointer text-center" for="frontImage">
+              <img id="frontPreview" class="hidden max-h-44 max-w-full object-contain rounded-lg mb-2" />
+              <span id="frontHint"><span class="text-2xl">＋</span><span class="block font-medium mt-1">Upload front image</span><span class="text-xs text-slate-500">PNG, JPG or WEBP</span></span>
+              <input id="frontImage" type="file" accept="image/*" class="hidden" />
+            </label>
+            <button type="button" data-clear="front" class="text-xs text-rose-600 mt-2 hidden">Remove image</button>
+          </div>
+          <div>
+            <label class="text-sm font-semibold block mb-2">PCB back side</label>
+            <label class="dropzone rounded-xl p-4 min-h-44 flex flex-col items-center justify-center cursor-pointer text-center" for="backImage">
+              <img id="backPreview" class="hidden max-h-44 max-w-full object-contain rounded-lg mb-2" />
+              <span id="backHint"><span class="text-2xl">＋</span><span class="block font-medium mt-1">Upload back image</span><span class="text-xs text-slate-500">PNG, JPG or WEBP</span></span>
+              <input id="backImage" type="file" accept="image/*" class="hidden" />
+            </label>
+            <button type="button" data-clear="back" class="text-xs text-rose-600 mt-2 hidden">Remove image</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div><h2 class="font-bold text-lg">3. Electrical / power testing</h2><p class="text-sm text-slate-500">Add test points, results, remarks and optional evidence photos.</p></div>
+          <button id="addElectrical" class="rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold px-3 py-2">＋ Add test</button>
+        </div>
+        <div id="electricalRows" class="space-y-3"></div>
+      </section>
+
+      <section class="section-card p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div><h2 class="font-bold text-lg">4. Functional testing</h2><p class="text-sm text-slate-500">Record programming, interface, relay and functional checks.</p></div>
+          <button id="addFunctional" class="rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold px-3 py-2">＋ Add test</button>
+        </div>
+        <div id="functionalRows" class="space-y-3"></div>
+      </section>
+
+      <section class="section-card p-5">
+        <h2 class="font-bold text-lg mb-1">5. Conclusion</h2>
+        <p class="text-sm text-slate-500 mb-3">Add a concise summary of the board's test outcome.</p>
+        <textarea id="conclusion" rows="3" class="field" placeholder="e.g. The PCB passed the listed electrical and functional tests."></textarea>
+      </section>
+    </div>
+
+    <aside class="space-y-4">
+      <section class="section-card p-5 xl:sticky xl:top-5">
+        <h2 class="font-bold text-lg">PDF settings</h2>
+        <p class="text-sm text-slate-500 mt-1">Choose the page layout and generate your report.</p>
+        <label class="block text-sm font-semibold mt-5">Page orientation</label>
+        <div class="grid grid-cols-2 gap-2 mt-2">
+          <button id="portraitBtn" class="orientation rounded-lg border-2 border-teal-700 bg-teal-50 p-3 text-sm font-semibold" data-orientation="portrait">▯ Portrait</button>
+          <button id="landscapeBtn" class="orientation rounded-lg border border-slate-200 p-3 text-sm font-semibold" data-orientation="landscape">▭ Landscape</button>
+        </div>
+        <label class="block text-sm font-semibold mt-4">Paper size</label>
+        <select id="paperSize" class="field mt-1.5"><option value="a4">A4</option><option value="letter">Letter</option></select>
+        <div class="mt-5 rounded-xl bg-slate-50 border border-slate-200 p-3">
+          <div class="flex justify-between text-sm"><span class="text-slate-500">Electrical tests</span><strong id="electricalCount">0</strong></div>
+          <div class="flex justify-between text-sm mt-2"><span class="text-slate-500">Functional tests</span><strong id="functionalCount">0</strong></div>
+          <div class="flex justify-between text-sm mt-2"><span class="text-slate-500">Pass / Fail / N.A.</span><strong id="statusCount">0 / 0 / 0</strong></div>
+        </div>
+        <button id="generatePdf" class="w-full mt-5 rounded-xl  bg-teal-700 hover:bg-slate-800 text-white font-bold py-3 px-4">Generate PDF report</button>
+        <p id="message" class="text-xs text-slate-500 mt-3 text-center">Your data and images stay in this browser session.</p>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-5 pb-8 text-center text-xs text-slate-400">PCB Test Report Generator · Runs locally in your browser</footer>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  let orientation = 'portrait';
+  const imageData = { front: null, back: null };
+
+  const defaults = {
+    electrical: [
+      { parameter: 'Board Power-On via Power Input Connector (J18)', status: 'Pass', remarks: 'PWR LED turns ON (5V, 3V3 present)' },
+      { parameter: '5V Buck Switching Regulator', status: 'Pass', remarks: 'Observed voltage: 5.1V' },
+      { parameter: '3.3V Regulator Output', status: 'Pass', remarks: 'Properly stepped down from 5V to 3.3V' }
+    ],
+    functional: [
+      { parameter: 'Board Programming', status: 'Pass', remarks: 'Uploaded using UART_0 pins, Reset and Boot buttons' },
+      { parameter: 'Activity and Status LEDs Working', status: 'Pass', remarks: 'Yes' },
+      { parameter: 'Relay Switching', status: 'Pass', remarks: 'Yes' }
+    ]
+  };
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function addRow(section, data = {}) {
+    const container = $(section + 'Rows');
+    const row = document.createElement('div');
+    row.className = 'test-row';
+    row.innerHTML = `
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Test item</span>
+        <button type="button" class="remove-row text-xs text-rose-600 hover:text-rose-800 font-semibold">Remove</button>
+      </div>
+      <div class="grid sm:grid-cols-[1fr_150px] gap-3">
+        <label class="text-xs font-semibold text-slate-600">Test parameter
+          <input class="field mt-1 parameter" placeholder="e.g. 5V regulator output" value="${escapeHtml(data.parameter || '')}">
+        </label>
+        <label class="text-xs font-semibold text-slate-600">Status
+          <select class="field mt-1 status">
+            <option ${data.status === 'Pass' ? 'selected' : ''} value="Pass">Pass</option>
+            <option ${data.status === 'Fail' ? 'selected' : ''} value="Fail">Fail</option>
+            <option ${data.status === 'N/A' ? 'selected' : ''} value="N/A">N/A</option>
+            <option ${data.status === 'Pending' ? 'selected' : ''} value="Pending">Pending</option>
+          </select>
+        </label>
+      </div>
+      <label class="block text-xs font-semibold text-slate-600 mt-3">Remarks
+        <textarea class="field mt-1 remarks" rows="2" placeholder="Enter observations, measured values or notes...">${escapeHtml(data.remarks || '')}</textarea>
+      </label>
+      <div class="mt-3 flex flex-wrap items-center gap-3">
+        <label class="inline-flex items-center gap-2 text-xs font-semibold text-teal-700 cursor-pointer">
+          <span class="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2">＋ Add evidence photo (optional)</span>
+          <input type="file" class="evidence hidden" accept="image/*">
+        </label>
+        <span class="evidence-name text-xs text-slate-500">No photo selected</span>
+        <button type="button" class="remove-evidence text-xs text-rose-600 hidden">Remove photo</button>
+      </div>
+      <img class="evidence-preview hidden mt-3 max-h-36 max-w-full rounded-lg border border-slate-200 object-contain" alt="Test evidence preview">
+    `;
+    container.appendChild(row);
+    row.querySelector('.remove-row').addEventListener('click', () => { row.remove(); updateCounts(); });
+    row.querySelector('.evidence').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const dataUrl = await readImage(file);
+      row.dataset.evidence = dataUrl;
+      row.querySelector('.evidence-name').textContent = file.name;
+      const img = row.querySelector('.evidence-preview');
+      img.src = dataUrl; img.classList.remove('hidden');
+      row.querySelector('.remove-evidence').classList.remove('hidden');
+    });
+    row.querySelector('.remove-evidence').addEventListener('click', () => {
+      delete row.dataset.evidence;
+      row.querySelector('.evidence').value = '';
+      row.querySelector('.evidence-name').textContent = 'No photo selected';
+      row.querySelector('.evidence-preview').classList.add('hidden');
+      row.querySelector('.remove-evidence').classList.add('hidden');
+    });
+    row.querySelectorAll('input,select,textarea').forEach(el => el.addEventListener('input', updateCounts));
+    updateCounts();
+  }
+
+  function readImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleBoardImage(side, file) {
+    if (!file) return;
+    imageData[side] = await readImage(file);
+    const img = $(side + 'Preview');
+    img.src = imageData[side]; img.classList.remove('hidden');
+    $(side + 'Hint').classList.add('hidden');
+    document.querySelector(`[data-clear="${side}"]`).classList.remove('hidden');
+  }
+
+  ['front','back'].forEach(side => {
+    $(side + 'Image').addEventListener('change', e => handleBoardImage(side, e.target.files[0]));
+    document.querySelector(`[data-clear="${side}"]`).addEventListener('click', () => {
+      imageData[side] = null; $(side + 'Image').value = '';
+      $(side + 'Preview').classList.add('hidden'); $(side + 'Hint').classList.remove('hidden');
+      document.querySelector(`[data-clear="${side}"]`).classList.add('hidden');
+    });
+  });
+
+  function collect(section) {
+    return [...$(section + 'Rows').querySelectorAll('.test-row')].map(row => ({
+      parameter: row.querySelector('.parameter').value.trim(),
+      status: row.querySelector('.status').value,
+      remarks: row.querySelector('.remarks').value.trim(),
+      evidence: row.dataset.evidence || null
+    })).filter(item => item.parameter || item.remarks || item.evidence);
+  }
+
+  function updateCounts() {
+    const e = collect('electrical'), f = collect('functional'), all = [...e, ...f];
+    $('electricalCount').textContent = e.length;
+    $('functionalCount').textContent = f.length;
+    $('statusCount').textContent = `${all.filter(x=>x.status==='Pass').length} / ${all.filter(x=>x.status==='Fail').length} / ${all.filter(x=>x.status==='N/A').length}`;
+  }
+
+  document.querySelectorAll('.orientation').forEach(btn => btn.addEventListener('click', () => {
+    orientation = btn.dataset.orientation;
+    document.querySelectorAll('.orientation').forEach(b => {
+      b.className = 'orientation rounded-lg border p-3 text-sm font-semibold ' +
+        (b === btn ? 'border-2 border-teal-700 bg-teal-50' : 'border-slate-200');
+    });
+  }));
+  $('addElectrical').addEventListener('click', () => addRow('electrical'));
+  $('addFunctional').addEventListener('click', () => addRow('functional'));
+
+  function getReportData() {
+    return {
+      project: $('project').value.trim(), board: $('board').value.trim(), revision: $('revision').value.trim(),
+      reportNo: $('reportNo').value.trim(), testedBy: $('testedBy').value.trim(), testDate: $('testDate').value,
+      overallNotes: $('overallNotes').value.trim(), conclusion: $('conclusion').value.trim(),
+      electrical: collect('electrical'), functional: collect('functional')
+    };
+  }
+
+  function addImageContain(doc, data, x, y, maxW, maxH) {
+    if (!data) return 0;
+    const props = doc.getImageProperties(data);
+    const ratio = Math.min(maxW / props.width, maxH / props.height);
+    const w = props.width * ratio, h = props.height * ratio;
+    doc.addImage(data, props.fileType || 'JPEG', x + (maxW-w)/2, y + (maxH-h)/2, w, h);
+    return h;
+  }
+
+  function generatePDF() {
+    const data = getReportData();
+    if (!data.project) {
+      $('message').textContent = 'Please enter a Project / Client name before generating the PDF.';
+      $('project').focus(); return;
+    }
+    if (!window.jspdf?.jsPDF) {
+      $('message').textContent = 'PDF library did not load. Check your internet connection and refresh.';
+      return;
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation, unit: 'mm', format: $('paperSize').value, compress: true });
+    const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+    const margin = 14, contentW = pageW - margin*2;
+    const teal = [13, 116, 110], dark = [15, 23, 42], muted = [100, 116, 139];
+    let y = 15, pageNum = 1;
+
+    const footer = () => {
+      doc.setDrawColor(226,232,240); doc.line(margin, pageH-11, pageW-margin, pageH-11);
+      doc.setFontSize(8); doc.setTextColor(...muted);
+      doc.text(data.reportNo || 'PCB TEST REPORT', margin, pageH-6);
+      doc.text(`Page ${pageNum}`, pageW-margin, pageH-6, {align:'right'});
+    };
+    const newPage = () => { footer(); doc.addPage(); pageNum++; y = 15; };
+    const ensure = (height) => { if (y + height > pageH - 17) newPage(); };
+    const textLines = (text, x, yy, width, fontSize=9, color=dark, font='normal') => {
+      doc.setFont('helvetica', font); doc.setFontSize(fontSize); doc.setTextColor(...color);
+      const lines = doc.splitTextToSize(String(text || '—'), width);
+      doc.text(lines, x, yy);
+      return lines.length * (fontSize * 0.42);
+    };
+    const heading = (title) => {
+      ensure(13); doc.setFillColor(...teal); doc.roundedRect(margin, y, contentW, 8, 1.5, 1.5, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(255,255,255);
+      doc.text(title, margin+3, y+5.5); y += 12;
+    };
+
+    // Cover / identification
+    y = 15;
+    heading('REPORT INFORMATION');
+    const info = [
+      ['Project / Client', data.project], ['PCB / Model', data.board || '—'],
+      ['Revision', data.revision || '—'], ['Tested by', data.testedBy || '—'],
+      ['Test date', data.testDate || '—'], ['Report number', data.reportNo || '—']
+    ];
+    const colW = contentW/3;
+    info.forEach((item,i) => {
+      const col = i%3, row = Math.floor(i/3), x = margin+col*colW, yy=y+row*15;
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text(item[0].toUpperCase(),x,yy);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...dark);
+      doc.text(doc.splitTextToSize(String(item[1]),colW-4),x,yy+5);
+    });
+    y += 34;
+
+    if (imageData.front || imageData.back) {
+      heading('PCB PHOTOGRAPHS');
+      const gap = 8, boxW = (contentW-gap)/2, boxH = orientation === 'landscape' ? 48 : 58;
+      [['FRONT SIDE',imageData.front],['BACK SIDE',imageData.back]].forEach((item,i) => {
+        const x = margin+i*(boxW+gap);
+        doc.setDrawColor(203,213,225); doc.roundedRect(x,y,boxW,boxH+9,2,2,'S');
+        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...muted);
+        doc.text(item[0],x+3,y+5);
+        if (item[1]) addImageContain(doc,item[1],x+3,y+8,boxW-6,boxH-2);
+        else { doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.text('Not provided',x+3,y+18); }
+      });
+      y += boxH+14;
+    }
+
+    function drawTable(title, rows) {
+      heading(title);
+      if (!rows.length) {
+        doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(...muted);
+        doc.text('No test items added.',margin,y); y+=9; return;
+      }
+      const widths = [contentW*.34, contentW*.15, contentW*.51];
+      const xs = [margin, margin+widths[0], margin+widths[0]+widths[1]];
+      const headerH = 8;
+      const drawHeader = () => {
+        doc.setFillColor(241,245,249); doc.rect(margin,y,contentW,headerH,'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...dark);
+        ['TEST PARAMETER','STATUS','REMARKS'].forEach((t,i)=>doc.text(t,xs[i]+2,y+5.3));
+        y += headerH;
+      };
+      drawHeader();
+      rows.forEach((item) => {
+        const paramLines = doc.splitTextToSize(item.parameter || '—', widths[0]-5);
+        const remarkLines = doc.splitTextToSize(item.remarks || '—', widths[2]-5);
+        const evidenceH = item.evidence ? 29 : 0;
+        const rowH = Math.max(10, paramLines.length*4.2+5, remarkLines.length*4.2+5, evidenceH+5);
+        if (y+rowH > pageH-17) { newPage(); heading(title+' (continued)'); drawHeader(); }
+        doc.setDrawColor(226,232,240); doc.rect(margin,y,contentW,rowH,'S');
+        doc.line(xs[1],y,xs[1],y+rowH); doc.line(xs[2],y,xs[2],y+rowH);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...dark);
+        doc.text(paramLines,xs[0]+2,y+5);
+        const statusColor = item.status==='Pass' ? [21,128,61] : item.status==='Fail' ? [185,28,28] : item.status==='N/A' ? [100,116,139] : [180,83,9];
+        doc.setFont('helvetica','bold'); doc.setTextColor(...statusColor); doc.text(item.status.toUpperCase(),xs[1]+2,y+5);
+        doc.setFont('helvetica','normal'); doc.setTextColor(...dark); doc.text(remarkLines,xs[2]+2,y+5);
+        if (item.evidence) {
+          try { addImageContain(doc,item.evidence,xs[2]+2,y+remarkLines.length*4.2+5,45,24); } catch(e) {}
+        }
+        y += rowH;
+      });
+      y += 7;
+    }
+
+    drawTable('ELECTRICAL / POWER TESTING',data.electrical);
+    drawTable('FUNCTIONAL TESTING',data.functional);
+
+    if (data.overallNotes) {
+      heading('TEST NOTES');
+      const h = textLines(data.overallNotes,margin,y,contentW,9,dark);
+      y += h+7;
+    }
+    if (data.conclusion) {
+      heading('CONCLUSION');
+      const h = textLines(data.conclusion,margin,y,contentW,9,dark);
+      y += h+7;
+    }
+    const all = [...data.electrical,...data.functional];
+    const counts = ['Pass','Fail','N/A','Pending'].map(s=>[s,all.filter(x=>x.status===s).length]);
+    ensure(18);
+    doc.setFillColor(248,250,252); doc.roundedRect(margin,y,contentW,13,2,2,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...dark);
+    doc.text('TEST SUMMARY',margin+3,y+5);
+    let sx=margin+37;
+    counts.forEach(([label,count])=>{doc.setFont('helvetica','normal');doc.text(`${label}: ${count}`,sx,y+5);sx+=27;});
+    y+=18;
+    footer();
+    const safeName = (data.project || 'PCB').replace(/[^a-z0-9-_]+/gi,'_');
+    doc.save(`${safeName}_PCB_Test_Report.pdf`);
+    $('message').textContent = 'PDF generated successfully.';
+  }
+
+  $('generatePdf').addEventListener('click', generatePDF);
+
+
+  $('testDate').value = new Date().toISOString().slice(0,10);
+  defaults.electrical.forEach(x=>addRow('electrical',x));
+  defaults.functional.forEach(x=>addRow('functional',x));
+})();
+</script>
+</body>
+</html>
