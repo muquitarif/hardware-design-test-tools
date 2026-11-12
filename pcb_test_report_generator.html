@@ -63,6 +63,15 @@
 
       <section class="section-card p-5">
         <div class="mb-4"><h2 class="font-bold text-lg">2. PCB Front/ Back Images</h2><p class="text-sm text-slate-500">Add front and back board images. These are embedded in the PDF.</p></div>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 mb-4">
+          <div class="flex items-center justify-between gap-3">
+            <label for="imageQuality" class="text-sm font-semibold">Image compression quality</label>
+            <strong id="qualityValue" class="text-sm text-teal-700">75%</strong>
+          </div>
+          <input id="imageQuality" type="range" min="40" max="95" value="75" class="w-full mt-2 accent-teal-700" />
+          <p class="text-xs text-slate-500 mt-1">Images are automatically resized to a maximum of 1800 px and compressed as JPEG before being added to the report. Higher quality produces larger PDFs.</p>
+          <p id="compressionInfo" class="text-xs text-slate-600 mt-2">No images compressed yet.</p>
+        </div>
         <div class="grid md:grid-cols-2 gap-4">
           <div>
             <label class="text-sm font-semibold block mb-2">PCB front side</label>
@@ -195,15 +204,19 @@
     row.querySelector('.evidence').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const dataUrl = await readImage(file);
-      row.dataset.evidence = dataUrl;
-      row.querySelector('.evidence-name').textContent = file.name;
-      const img = row.querySelector('.evidence-preview');
-      img.src = dataUrl; img.classList.remove('hidden');
-      row.querySelector('.remove-evidence').classList.remove('hidden');
+      try {
+        const compressed = await compressImage(file);
+        row.dataset.evidence = compressed.dataUrl;
+        row.dataset.evidenceSize = compressed.size;
+        row.querySelector('.evidence-name').textContent = `${file.name} · ${formatBytes(file.size)} → ${formatBytes(compressed.size)}`;
+        const img = row.querySelector('.evidence-preview');
+        img.src = compressed.dataUrl; img.classList.remove('hidden');
+        row.querySelector('.remove-evidence').classList.remove('hidden');
+        updateCompressionInfo();
+      } catch (error) { alert(error.message || 'Unable to process this image.'); }
     });
     row.querySelector('.remove-evidence').addEventListener('click', () => {
-      delete row.dataset.evidence;
+      delete row.dataset.evidence; delete row.dataset.evidenceSize; updateCompressionInfo();
       row.querySelector('.evidence').value = '';
       row.querySelector('.evidence-name').textContent = 'No photo selected';
       row.querySelector('.evidence-preview').classList.add('hidden');
@@ -213,28 +226,67 @@
     updateCounts();
   }
 
-  function readImage(file) {
-    return new Promise((resolve, reject) => {
+  function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB'];
+    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), 2);
+    return `${(bytes / Math.pow(1024, index)).toFixed(index ? 1 : 0)} ${units[index]}`;
+  }
+
+  function updateCompressionInfo() {
+    const boardImages = Object.values(imageData).filter(Boolean);
+    const evidenceRows = [...document.querySelectorAll('.test-row')].filter(row => row.dataset.evidence);
+    const count = boardImages.length + evidenceRows.length;
+    if (!count) { $('compressionInfo').textContent = 'No images compressed yet.'; return; }
+    const total = boardImages.reduce((sum, item) => sum + item.size, 0) +
+      evidenceRows.reduce((sum, row) => sum + Number(row.dataset.evidenceSize || 0), 0);
+    $('compressionInfo').textContent = `${count} image(s) compressed · ${formatBytes(total)} total compressed size`;
+  }
+
+  async function compressImage(file) {
+    const bitmap = await createImageBitmap(file);
+    const maxDimension = 1800;
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d', { alpha: false });
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    const quality = Number($('imageQuality').value) / 100;
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+    if (!blob) throw new Error('Image compression failed. Please try another image.');
+    const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
       reader.onerror = reject;
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(blob);
     });
+    return { dataUrl, size: blob.size, originalSize: file.size };
   }
 
   async function handleBoardImage(side, file) {
     if (!file) return;
-    imageData[side] = await readImage(file);
+    try {
+      const compressed = await compressImage(file);
+      imageData[side] = { data: compressed.dataUrl, size: compressed.size };
+      const saved = Math.max(0, 100 - (compressed.size / file.size * 100));
+      $('compressionInfo').textContent = `${file.name}: ${formatBytes(file.size)} → ${formatBytes(compressed.size)} (${saved.toFixed(0)}% smaller)`;
+    } catch (error) { alert(error.message || 'Unable to process this image.'); return; }
     const img = $(side + 'Preview');
-    img.src = imageData[side]; img.classList.remove('hidden');
+    img.src = imageData[side].data; img.classList.remove('hidden');
     $(side + 'Hint').classList.add('hidden');
     document.querySelector(`[data-clear="${side}"]`).classList.remove('hidden');
   }
 
+  $('imageQuality').addEventListener('input', () => { $('qualityValue').textContent = $('imageQuality').value + '%'; });
+
   ['front','back'].forEach(side => {
     $(side + 'Image').addEventListener('change', e => handleBoardImage(side, e.target.files[0]));
     document.querySelector(`[data-clear="${side}"]`).addEventListener('click', () => {
-      imageData[side] = null; $(side + 'Image').value = '';
+      imageData[side] = null; $(side + 'Image').value = ''; updateCompressionInfo();
       $(side + 'Preview').classList.add('hidden'); $(side + 'Hint').classList.remove('hidden');
       document.querySelector(`[data-clear="${side}"]`).classList.add('hidden');
     });
@@ -341,7 +393,7 @@
     if (imageData.front || imageData.back) {
       heading('PCB PHOTOGRAPHS');
       const gap = 8, boxW = (contentW-gap)/2, boxH = orientation === 'landscape' ? 48 : 58;
-      [['FRONT SIDE',imageData.front],['BACK SIDE',imageData.back]].forEach((item,i) => {
+      [['FRONT SIDE',imageData.front?.data],['BACK SIDE',imageData.back?.data]].forEach((item,i) => {
         const x = margin+i*(boxW+gap);
         doc.setDrawColor(203,213,225); doc.roundedRect(x,y,boxW,boxH+9,2,2,'S');
         doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...muted);
